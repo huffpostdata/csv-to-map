@@ -4,6 +4,10 @@
     <meta charset="utf-8">
     <title>SVG map generator</title>
     <style>
+      .input-block {
+        display: inline-block;
+      }
+
       textarea {
         width: 20rem;
         height: 30rem;
@@ -12,19 +16,47 @@
   </head>
   <body>
     <div id="map"></div>
+    <button id="download-svg">Download as SVG</button>
     <p>Paste CSV data here.</p>
     <p>Rules:</p>
     <ul>
       <li>The first column must be the county FIPS code.</li>
-      <li>
-        The second column must be a CSS fill color: something like `#ab12ef`
-        or `rgba(255, 255, 255, 0.5)`.
-      </li>
+      <li>The second column must be a CSS class name, like `bucket0`</li>
       <li>There must be <strong>no</strong> column headers.</li>
     </ul>
-    <textarea id="csv">01004,#aaaaaa
-02005,#bababa
-06071,#ffaabb</textarea>
+    <div class="input-block">
+      <h2>CSV</h2>
+      <textarea id="csv">32023,bucket0
+04005,bucket1
+06071,bucket2
+56037,bucket3</textarea>
+    </div>
+    <div class="input-block">
+      <h2>CSS</h2>
+      <textarea id="css">
+path {
+  fill: #eee;
+  stroke: white;
+  stroke-width: 0.5;
+}
+
+path.bucket0 {
+  fill: #caa;
+}
+
+path.bucket1 {
+  fill: #aca;
+}
+
+path.bucket2 {
+  fill: #aac;
+}
+
+path.bucket3 {
+  fill: #666;
+}
+      </textarea>
+    </div>
     <script src="//d3js.org/d3.v3.min.js"></script>
     <script src="//d3js.org/topojson.v1.min.js"></script>
     <script>
@@ -34,8 +66,11 @@
       var path = d3.geo.path();
 
       var svg = d3.select('#map').append('svg')
-      .attr('width', width)
-      .attr('height', height);
+        .attr('width', width)
+        .attr('height', height);
+
+      var defs = svg.append('defs');
+      var style = defs.append('style');
 
       d3.json('us.json', function(error, topology) {
         if (error) throw error;
@@ -48,20 +83,33 @@
         function refresh() {
           var csv = document.querySelector('#csv').value;
           var rows = d3.csv.parseRows(csv);
-          var fips_int_to_color = {};
+          var fips_int_to_class = {};
           rows.forEach(function(row) {
             var fips_int = parseInt(row[0], 10);
-            fips_int_to_color[fips_int] = row[1];
+            fips_int_to_class[fips_int] = row[1];
           });
 
+          var css = document.querySelector('#css').value;
+          console.log(style);
+          style.text(css);
+
           svg.selectAll('path')
-            .attr('fill', function(d) { return fips_int_to_color[d.id]; });
+            .attr('class', function(d) { return fips_int_to_class[d.id]; });
         }
 
         d3.select('#csv').on('change', refresh);
         refresh();
       });
 
+      document.querySelector('#download-svg').addEventListener('click', function() {
+        var svg = document.querySelector('#map').innerHTML
+          .replace(/<svg/, '<svg version="1.1" xmlns="http://www.w3.org/2000/svg"');
+        var encoded = btoa(svg);
+        var a = document.createElement('a');
+        a.setAttribute('download', 'map.svg');
+        a.setAttribute('href', 'data:application/octet-stream;base64,' + encoded);
+        a.click();
+      });
     </script>
   </body>
 </html>
