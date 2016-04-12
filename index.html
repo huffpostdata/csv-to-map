@@ -1,0 +1,67 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="utf-8">
+    <title>SVG map generator</title>
+    <style>
+      textarea {
+        width: 20rem;
+        height: 30rem;
+      }
+    </style>
+  </head>
+  <body>
+    <div id="map"></div>
+    <p>Paste CSV data here.</p>
+    <p>Rules:</p>
+    <ul>
+      <li>The first column must be the county FIPS code.</li>
+      <li>
+        The second column must be a CSS fill color: something like `#ab12ef`
+        or `rgba(255, 255, 255, 0.5)`.
+      </li>
+      <li>There must be <strong>no</strong> column headers.</li>
+    </ul>
+    <textarea id="csv">01004,#aaaaaa
+02005,#bababa
+06071,#ffaabb</textarea>
+    <script src="//d3js.org/d3.v3.min.js"></script>
+    <script src="//d3js.org/topojson.v1.min.js"></script>
+    <script>
+      var width = 960,
+          height = 500;
+
+      var path = d3.geo.path();
+
+      var svg = d3.select('#map').append('svg')
+      .attr('width', width)
+      .attr('height', height);
+
+      d3.json('us.json', function(error, topology) {
+        if (error) throw error;
+
+        svg.selectAll('path')
+          .data(topojson.feature(topology, topology.objects.counties).features)
+          .enter().append('path')
+          .attr('d', path);
+
+        function refresh() {
+          var csv = document.querySelector('#csv').value;
+          var rows = d3.csv.parseRows(csv);
+          var fips_int_to_color = {};
+          rows.forEach(function(row) {
+            var fips_int = parseInt(row[0], 10);
+            fips_int_to_color[fips_int] = row[1];
+          });
+
+          svg.selectAll('path')
+            .attr('fill', function(d) { return fips_int_to_color[d.id]; });
+        }
+
+        d3.select('#csv').on('change', refresh);
+        refresh();
+      });
+
+    </script>
+  </body>
+</html>
