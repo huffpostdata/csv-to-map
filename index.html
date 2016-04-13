@@ -6,6 +6,7 @@
     <style>
       .input-block {
         display: inline-block;
+        vertical-align: top;
       }
 
       textarea {
@@ -17,6 +18,7 @@
   <body>
     <div id="map"></div>
     <button id="download-svg">Download as SVG</button>
+    <button id="download-svg-compatible">Download as "compatible" SVG (no CSS)</button>
     <p>Paste CSV data here.</p>
     <p>Rules:</p>
     <ul>
@@ -40,6 +42,12 @@ path {
   stroke-width: 0.5;
 }
 
+path.states {
+  fill: none;
+  stroke: white;
+  stroke-width: 1.5;
+}
+
 path.bucket0 {
   fill: #caa;
 }
@@ -56,6 +64,12 @@ path.bucket3 {
   fill: #666;
 }
       </textarea>
+      <p>The only CSS rules that work with "compatible" are:</p>
+      <ul>
+        <li><a href="https://developer.mozilla.org/en-US/docs/Web/SVG/Attribute/fill">fill</a></li>
+        <li><a href="https://developer.mozilla.org/en-US/docs/Web/SVG/Attribute/stroke">stroke</a></li>
+        <li><a href="https://developer.mozilla.org/en-US/docs/Web/SVG/Attribute/stroke-width">stroke-width</a></li>
+      </ul>
     </div>
     <script src="//d3js.org/d3.v3.min.js"></script>
     <script src="//d3js.org/topojson.v1.min.js"></script>
@@ -71,13 +85,19 @@ path.bucket3 {
 
       var defs = svg.append('defs');
       var style = defs.append('style');
+      var g = svg.append('g').classed('counties', true);
 
       d3.json('us.json', function(error, topology) {
         if (error) throw error;
 
-        svg.selectAll('path')
+        g.selectAll('path')
           .data(topojson.feature(topology, topology.objects.counties).features)
           .enter().append('path')
+          .attr('d', path);
+
+        svg.append('path')
+          .classed('states', true)
+          .datum(topojson.mesh(topology, topology.objects.states, function(a, b) { return a !== b; }))
           .attr('d', path);
 
         function refresh() {
@@ -90,10 +110,9 @@ path.bucket3 {
           });
 
           var css = document.querySelector('#css').value;
-          console.log(style);
           style.text(css);
 
-          svg.selectAll('path')
+          g.selectAll('path')
             .attr('class', function(d) { return fips_int_to_class[d.id]; });
         }
 
@@ -101,15 +120,59 @@ path.bucket3 {
         refresh();
       });
 
-      document.querySelector('#download-svg').addEventListener('click', function() {
-        var svg = document.querySelector('#map').innerHTML
+      /*
+       * Adobe Illustrator can't import an SVG that uses CSS. So we go through
+       * and set the style to the computed style for all the attributes we can
+       * think of.
+       *
+       * Luckily, we only care about fill, stroke and stroke-width, and all
+       * those CSS rules have corresponding SVG attributes.
+       */
+      function svg_to_denormalized_xml(svg) {
+        var div = document.createElement('div');
+        document.body.appendChild(div);
+        var svg2 = svg.cloneNode(true);
+        div.appendChild(svg2);
+
+        Array.prototype.forEach.call(svg2.querySelectorAll('path'), function(path) {
+          var style = window.getComputedStyle(path);
+          path.setAttribute('fill', style.fill);
+          path.setAttribute('stroke', style.stroke);
+          path.setAttribute('stroke-width', style.strokeWidth);
+        });
+
+        Array.prototype.forEach.call(svg2.querySelectorAll('style'), function(el) { el.remove(); });
+
+        var svg = div.innerHTML
           .replace(/<svg/, '<svg version="1.1" xmlns="http://www.w3.org/2000/svg"');
-        var encoded = btoa(svg);
+
+        div.remove();
+        return svg;
+      }
+
+      function send_string_to_browser(str) {
+        var blob = new Blob([ str ]);
+        var url = window.URL.createObjectURL(blob);
         var a = document.createElement('a');
         a.setAttribute('download', 'map.svg');
-        a.setAttribute('href', 'data:application/octet-stream;base64,' + encoded);
+        a.setAttribute('href', url);
         a.click();
-      });
+      }
+
+      function download_normal() {
+        var s = document.querySelector('#map').innerHTML
+          .replace(/<svg/, '<svg version="1.1" xmlns="http://www.w3.org/2000/svg"');
+        send_string_to_browser(s);
+      }
+
+      function download_compatible() {
+        var svg = document.querySelector('#map svg');
+        var s = svg_to_denormalized_xml(svg);
+        send_string_to_browser(s);
+      }
+
+      document.querySelector('#download-svg').addEventListener('click', download_normal);
+      document.querySelector('#download-svg-compatible').addEventListener('click', download_compatible);
     </script>
   </body>
 </html>
